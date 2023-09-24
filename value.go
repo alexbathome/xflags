@@ -29,234 +29,136 @@ func isBoolValue(v Value) bool {
 	return false
 }
 
+var _ BoolValue = (*genericValue[bool])(nil)
+
 // ValidateFunc is a function that validates an argument before it is parsed.
 type ValidateFunc = func(arg string) error
-
-type bitFieldValue struct {
-	p    *uint64
-	mask uint64
-}
-
-func newBitFieldValue(val bool, p *uint64, mask uint64) *bitFieldValue {
-	v := &bitFieldValue{p: p, mask: mask}
-	v.set(val)
-	return v
-}
-
-func (p *bitFieldValue) IsBoolFlag() bool { return true }
-
-func (p *bitFieldValue) String() string { return fmt.Sprintf("0x%0x", *p.p) }
-
-func (p *bitFieldValue) Get() interface{} { return *p.p }
-
-func (p *bitFieldValue) Set(s string) error {
-	v, err := strconv.ParseBool(s)
-	if err != nil {
-		return err
-	}
-	p.set(v)
-	return nil
-}
-
-func (p *bitFieldValue) set(v bool) {
-	if v {
-		*p.p |= p.mask
-	}
-}
-
-type boolValue bool
-
-func newBoolValue(val bool, p *bool) *boolValue {
-	*p = val
-	return (*boolValue)(p)
-}
-
-func (p *boolValue) IsBoolFlag() bool { return true }
-
-func (p *boolValue) String() string { return strconv.FormatBool((bool)(*p)) }
-
-func (p *boolValue) Get() interface{} { return (bool)(*p) }
-
-func (p *boolValue) Set(s string) error {
-	v, err := strconv.ParseBool(s)
-	if err != nil {
-		return err
-	}
-	*p = boolValue(v)
-	return nil
-}
-
-type durationValue time.Duration
-
-func newDurationValue(val time.Duration, p *time.Duration) *durationValue {
-	*p = val
-	return (*durationValue)(p)
-}
-
-func (p *durationValue) String() string { return (time.Duration)(*p).String() }
-
-func (p *durationValue) Get() interface{} { return (time.Duration)(*p) }
-
-func (p *durationValue) Set(s string) error {
-	v, err := time.ParseDuration(s)
-	if err != nil {
-		return err
-	}
-	*p = durationValue(v)
-	return nil
-}
-
-type float64Value float64
-
-func newFloat64Value(val float64, p *float64) *float64Value {
-	*p = val
-	return (*float64Value)(p)
-}
-
-func (p *float64Value) String() string {
-	return strconv.FormatFloat((float64)(*p), 'e', -1, 64)
-}
-
-func (p *float64Value) Get() interface{} { return (float64)(*p) }
-
-func (p *float64Value) Set(s string) error {
-	v, err := strconv.ParseFloat(s, 64)
-	if err != nil {
-		return err
-	}
-	*p = float64Value(v)
-	return nil
-}
 
 type funcValue func(string) error
 
 func (f funcValue) Set(s string) error { return f(s) }
 
-type intValue int
-
-func newIntValue(val int, p *int) *intValue {
-	*p = val
-	return (*intValue)(p)
+type cliGenericTypes interface {
+	string | uint | uint64 | int | int64 | bool | time.Duration | float64
 }
 
-func (p *intValue) String() string {
-	return strconv.FormatInt((int64)(*p), 10)
-}
-
-func (p *intValue) Get() interface{} { return (int64)(*p) }
-
-func (p *intValue) Set(s string) error {
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return err
-	}
-	*p = intValue(v)
-	return nil
-}
-
-type int64Value int64
-
-func newInt64Value(val int64, p *int64) *int64Value {
-	*p = val
-	return (*int64Value)(p)
-}
-
-func (p *int64Value) String() string {
-	return strconv.FormatInt((int64)(*p), 10)
-}
-
-func (p *int64Value) Get() interface{} { return (int64)(*p) }
-
-func (p *int64Value) Set(s string) error {
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return err
-	}
-	*p = int64Value(v)
-	return nil
-}
-
-type stringValue string
-
-func newStringValue(val string, p *string) *stringValue {
-	*p = val
-	return (*stringValue)(p)
-}
-
-func (p *stringValue) String() string { return (string)(*p) }
-
-func (p *stringValue) Get() interface{} { return (string)(*p) }
-
-func (p *stringValue) Set(s string) error {
-	*p = stringValue(s)
-	return nil
-}
-
-type stringSliceValue struct {
-	p   *[]string
+// genericSliceValue is a generic struct that describes a
+// slice of generic type T
+type genericSliceValue[T cliGenericTypes] struct {
+	p   *[]T
 	hot bool
 }
 
-func newStringSliceValue(val []string, p *[]string) *stringSliceValue {
+func newGenericSlice[T cliGenericTypes](val []T, p *[]T) *genericSliceValue[T] {
 	*p = val
-	return &stringSliceValue{p: p}
+	return &genericSliceValue[T]{p: p}
 }
 
-func (p *stringSliceValue) String() string {
+func (p *genericSliceValue[T]) String() string {
 	return fmt.Sprintf("%v", *p.p)
 }
 
-func (p *stringSliceValue) Get() interface{} { return *p.p }
+func (p *genericSliceValue[T]) Get() interface{} { return *p.p }
 
-func (p *stringSliceValue) Set(s string) error {
+func (p *genericSliceValue[T]) Set(s string) error {
 	if !p.hot {
-		*p.p = make([]string, 0, 1)
+		*p.p = make([]T, 0, 1)
 		p.hot = true
 	}
-	*p.p = append(*p.p, s)
+	*p.p = append(*p.p, any(s).(T))
 	return nil
 }
 
-type uintValue uint
+type genericValue[T cliGenericTypes] struct {
+	p      *T
+	isBool bool
+}
 
-func newUintValue(val uint, p *uint) *uintValue {
+func newGeneric[T cliGenericTypes](val T, p *T, isbool bool) *genericValue[T] {
 	*p = val
-	return (*uintValue)(p)
-}
-
-func (p *uintValue) String() string {
-	return strconv.FormatInt((int64)(*p), 10)
-}
-
-func (p *uintValue) Get() interface{} { return (int64)(*p) }
-
-func (p *uintValue) Set(s string) error {
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return err
+	return &genericValue[T]{
+		p:      p,
+		isBool: isbool,
 	}
-	*p = uintValue(v)
-	return nil
 }
 
-type uint64Value uint64
+func (p *genericValue[T]) IsBoolFlag() bool { return p.isBool }
 
-func newUint64Value(val uint64, p *uint64) *uint64Value {
-	*p = val
-	return (*uint64Value)(p)
-}
-
-func (p *uint64Value) String() string {
-	return strconv.FormatInt((int64)(*p), 10)
-}
-
-func (p *uint64Value) Get() interface{} { return (int64)(*p) }
-
-func (p *uint64Value) Set(s string) error {
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return err
+func (p *genericValue[T]) String() string {
+	switch v := any(p.p).(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case uint64:
+		return strconv.FormatUint(v, 10)
+	case uint:
+		return strconv.FormatUint(uint64(v), 10)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case int:
+		return strconv.FormatInt(int64(v), 10)
+	case bool:
+		return strconv.FormatBool(v)
+	case time.Duration:
+		return fmt.Sprint(v)
+	default:
+		return ""
 	}
-	*p = uint64Value(v)
+}
+
+func (p *genericValue[T]) Get() T {
+	return *p.p
+}
+
+func (p *genericValue[T]) Set(s string) error {
+	switch v := any(*p.p).(type) {
+	case string:
+		*p.p = any(s).(T)
+	case float64:
+		v, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return err
+		}
+		*p.p = any(float64(v)).(T)
+	case uint64:
+		v, err := strconv.ParseUint(s, 10, 64)
+		if err != nil {
+			return err
+		}
+		*p.p = any(uint(v)).(T)
+	case uint:
+		o, err := strconv.ParseUint(s, 10, 32)
+		if err != nil {
+			return err
+		}
+		*p.p = any(uint(o)).(T)
+	case int64:
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return err
+		}
+		*p.p = any(int64(v)).(T)
+	case int:
+		o, err := strconv.ParseInt(s, 10, 32)
+		if err != nil {
+			return err
+		}
+		*p.p = any(int(o)).(T)
+	case bool:
+		v, err := strconv.ParseBool(s)
+		if err != nil {
+			return err
+		}
+		*p.p = any(bool(v)).(T)
+	case time.Duration:
+		v, err := time.ParseDuration(s)
+		if err != nil {
+			return err
+		}
+		*p.p = any(time.Duration(v)).(T)
+	default:
+		return fmt.Errorf("unsupported type: %T", *p.p)
+	}
 	return nil
 }

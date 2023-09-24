@@ -8,69 +8,6 @@ import (
 	"testing"
 )
 
-func TestSubcommands(t *testing.T) {
-	// ranCommands is a bit mask to identify which subcommand handlers were
-	// invoked
-	var ranCommands uint64
-	var setFlags uint64
-
-	// newCommand is a function to recursively create subcommands
-	var newCommand func(n, of uint64) Commander
-	newCommand = func(n, of uint64) Commander {
-		c := NewCommand(fmt.Sprintf("command%02d", n), "").
-			Flags(
-				BitField(
-					&setFlags,
-					uint64(1)<<(n-1),
-					fmt.Sprintf("x%02d", n),
-					false,
-					"",
-				),
-			).
-			HandleFunc(func(args []string) int {
-				ranCommands |= 1 << (n - 1)
-				return 0
-			})
-		if n < of {
-			c.Subcommands(newCommand(n+1, of))
-		}
-		return c
-	}
-
-	// call each subcommand
-	cmdDepth := uint64(64)
-	cmd := NewCommand("test", "").
-		Subcommands(newCommand(1, cmdDepth)).
-		Must()
-	for i := uint64(0); i < cmdDepth; i++ {
-		// build args to call subcommand i
-		ranCommands = 0
-		args := make([]string, 0)
-		for j := uint64(0); j < i+1; j++ {
-			args = append(
-				args,
-				fmt.Sprintf("command%02d", j+1), fmt.Sprintf("--x%02d", j+1),
-			)
-		}
-
-		// invoke the subcommand handler
-		subcommand, err := cmd.Parse(args)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		subcommand.HandlerFunc(nil)
-
-		// check which commands run and flags were set
-		assertUint64(t, 1<<i, ranCommands)
-		expectFlags := uint64(0)
-		for j := uint64(0); j < i+1; j++ {
-			expectFlags |= 1 << j
-		}
-		assertUint64(t, expectFlags, setFlags)
-	}
-}
-
 // TestPosFlagOrdering enforces the rule that no positional arguments may be
 // specified after another variable length positional argument as this would
 // create ambiguity as to which flag a given argument belongs to. Fixed length

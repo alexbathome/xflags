@@ -9,22 +9,6 @@ import (
 	"time"
 )
 
-func TestBitField(t *testing.T) {
-	var v uint64
-	_, err := NewCommand("test", "").
-		Flags(
-			BitField(&v, 0x01, "foo", false, "").Must(),
-			BitField(&v, 0x02, "bar", false, "").Must(),
-			BitField(&v, 0x04, "baz", true, "").Must(),
-		).
-		Must().
-		Parse([]string{"--foo"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertInt64(t, 0x05, int64(v))
-}
-
 func TestBool(t *testing.T) {
 	v := false
 	if assertFlagParses(t, Bool(&v, "foo", false, "").Must(), "--foo") {
@@ -107,31 +91,6 @@ func ExampleFlagBuilder_Validate() {
 	// Output:
 	// ping: 127.0.0.1
 	// Argument error: --ip: invalid IP: 256.0.0.1
-}
-
-func ExampleBitField() {
-	const (
-		UserRead    uint64 = 0400
-		UserWrite   uint64 = 0200
-		UserExecute uint64 = 0100
-	)
-
-	var mode uint64 = 0444 // -r--r--r--
-
-	cmd := NewCommand("user-allow", "").
-		Flags(
-			BitField(&mode, UserRead, "r", false, "Enable user read"),
-			BitField(&mode, UserWrite, "w", false, "Enable user write"),
-			BitField(&mode, UserExecute, "x", false, "Enable user execute"),
-		).
-		HandleFunc(func(args []string) (exitCode int) {
-			fmt.Printf("File mode: %s\n", os.FileMode(mode))
-			return
-		})
-
-	// Enable user read and write
-	RunWithArgs(cmd, "-r", "-w")
-	// Output: File mode: -rw-r--r--
 }
 
 func ExampleFunc() {
